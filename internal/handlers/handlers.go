@@ -1,16 +1,112 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/CloudyKit/jet/v6"
+	"github.com/gorilla/websocket"
 )
+
+var wsChan = make(chan WSPayload)
+var clients = make(map[WebSocketConnection]string)
 
 var views = jet.NewSet(
 	jet.NewOSFileSystemLoader("./html"),
 	jet.InDevelopmentMode(),
 )
+
+var upgradeConnection = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+type WebSocketConnection struct {
+	*websocket.Conn
+}
+
+// WSJsonResponse defines the response sent back from websocket
+type WSJsonResponse struct {
+	Action      string `json:"action"`
+	Message     string `json:"message"`
+	MessageType string `json:"message_type"`
+}
+
+type WSPayload struct {
+	Action   string              `json:"action"`
+	Username string              `json:"username"`
+	Message  string              `json:"message"`
+	Conn     WebSocketConnection `json:"-"`
+}
+
+// WSEndpoint upgrades connection to websocket
+func WSEndpoint(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgradeConnection.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println("Client connected to endpoint")
+	var response WSJsonResponse
+	response.Message = `<em><small>Connected to server</small></em>`
+
+	conn := WebSocketConnection{
+		Conn: ws,
+	}
+	clients[conn] = ""
+
+	err = ws.WriteJSON(response)
+	if err != nil {
+		log.Println(err)
+	}
+
+	go ListenForWS(&conn)
+}
+
+func ListenForWS(conn *WebSocketConnection) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Error:", fmt.Sprintf("%v", r))
+		}
+	}()
+
+	var payload WSPayload
+	for {
+		err := conn.ReadJSON(&payload)
+		if err != nil {
+			// Do nothing
+		} else {
+			payload.Conn = *conn
+			wsChan <- payload
+		}
+	}
+}
+
+func ListenToWSChannel() {
+	var response WSJsonResponse
+
+	for {
+		e := <-wsChan
+		response.Action = "Got here"
+		response.Message = fmt.Sprintf("Some message, and action was %s", e.Action)
+		broadcastToAll(response)
+	}
+}
+
+func broadcastToAll(response WSJsonResponse) {
+	for client := range clients {
+		err := client.WriteJSON(response)
+		if err != nil {
+			log.Println("Websocket err")
+			_ = client.Close()
+			delete(clients, client)
+		}
+	}
+}
 
 func Home(w http.ResponseWriter, r *http.Request) {
 	err := renderPage(w, "home.jet", nil)
