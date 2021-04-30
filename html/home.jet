@@ -74,6 +74,15 @@ Save
                 let j = JSON.parse(msg.data)
                 console.log(j);
             }
+
+
+            let username = document.getElementById("username");
+            username.addEventListener("change", function() {
+                let jsonData = {};
+                jsonData["action"] = "username"
+                jsonData["username"] = this.value;
+                socket.send(JSON.stringify(jsonData));
+            });
         })
     </script>
 </body>
