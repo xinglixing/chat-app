@@ -36,6 +36,9 @@ Save
                     <label for="message">Message</label>
                     <input type="text" name="message" id="message" class="form-control" autocomplete="off">
                 </div>
+                <hr>
+                <a href="javascript:void(0);" class="btn btn-outline-secondary" id="sendBtn">Send</a>
+
                 <input type="hidden" name="action" id="action">
                 <hr>
 
@@ -55,6 +58,9 @@ Save
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js" integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf" crossorigin="anonymous"></script>  
     <script>
         let socket = null;
+        let o = document.getElementById("output");
+        let userField = document.getElementById("username");
+        let messageField = document.getElementById("message");
 
         window.onbeforeunload = function() {
             console.log("Leaving");
@@ -98,21 +104,60 @@ Save
                             })
                         }
                         break;
-                
+                        
+                    case "broadcast":
+                        o.innerHTML = o.innerHTML + data.message + "<br>";
+                        break;
+
                     default:
                         break;
                 }
             }
 
-
-            let username = document.getElementById("username");
-            username.addEventListener("change", function() {
+            userField.addEventListener("change", function() {
                 let jsonData = {};
                 jsonData["action"] = "username"
                 jsonData["username"] = this.value;
                 socket.send(JSON.stringify(jsonData));
             });
-        })
+
+            messageField.addEventListener("keydown", function(e) {
+                if (e.code === "Enter") {
+                    if (! socket) {
+                        console.log("No connection!");
+                        return false;
+                    }
+
+                    if (userField.value === "" || messageField.value === "") {
+                        alert("Fill out username or message.");
+                        return false;
+                    } else {
+                        sendMessage();
+                    }
+
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
+
+            document.getElementById("sendBtn").addEventListener("click", function() {
+                if (userField.value.replace(/\s+/g, '') === "" || messageField.value.replace(/\s+/g, '') === "") {
+                    alert("Fill out username or message");
+                    return false;
+                } else {
+                    sendMessage();
+                }
+            });
+        });
+
+        function sendMessage() {
+            let jsonData = {};
+            jsonData["action"] = "broadcast";
+            jsonData["username"] = userField.value;
+            jsonData["message"] = messageField.value;
+            socket.send(JSON.stringify(jsonData));
+            messageField = "";
+        }
     </script>
 </body>
 </html>
